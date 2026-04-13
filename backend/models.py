@@ -62,16 +62,25 @@ class TaskType(str, Enum):
 
 class Workspace(BaseModel):
     id: str
-    path: str
+    # Dual repos: spark (AOI) + vscan90
+    spark_path: str
+    vscan_path: str
     display_name: str
     color: str = "blue"
     color_hex: str = "#4a9eff"
     status: WorkspaceStatus = WorkspaceStatus.available
     vcs_type: VCSType = VCSType.unknown
-    current_branch: Optional[str] = None
+    # Branch state for each repo
+    current_branch: Optional[str] = None   # spark branch
+    vscan_branch: Optional[str] = None     # vscan90 branch
     task_tt: Optional[str] = None
     last_activity: Optional[str] = None
     session_id: Optional[str] = None
+
+    @property
+    def path(self) -> str:
+        """Primary path alias (spark repo) for backward compat."""
+        return self.spark_path
 
 
 # ── Task ───────────────────────────────────────────────────────────

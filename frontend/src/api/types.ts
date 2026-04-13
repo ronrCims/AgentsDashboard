@@ -15,13 +15,17 @@ export type AutonomyLevel = 'full_auto' | 'checkpoint' | 'supervised' | 'report_
 
 export interface Workspace {
   id: string;
-  path: string;
+  // Dual repos
+  spark_path: string;
+  vscan_path: string;
+  path: string;          // alias for spark_path (legacy compat)
   display_name: string;
   color: string;
   color_hex: string;
   status: WorkspaceStatus;
   vcs_type: 'svn' | 'git' | 'unknown';
-  current_branch: string | null;
+  current_branch: string | null;   // spark branch
+  vscan_branch: string | null;     // vscan90 branch
   task_tt: string | null;
   last_activity: string | null;
   session_id: string | null;

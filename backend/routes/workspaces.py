@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 import config
-from config import AGENT_COLORS, WORKSPACE_PATHS
+from config import AGENT_COLORS, WORKSPACE_REPOS
 from models import SwitchBranchRequest, Workspace, WorkspaceStatus
 from store import JsonStore
 from svn_bridge import check_clean_state, detect_vcs, get_current_branch
@@ -33,30 +33,44 @@ def _get_store() -> JsonStore:
 
 
 def _init_workspaces():
-    """Initialize workspace registry if empty."""
+    """Initialize workspace registry if empty or if paths have changed."""
     store = _get_store()
-    if store.read_all():
-        return
+    existing = store.read_all()
 
-    for ws_id, ws_path in WORKSPACE_PATHS.items():
+    for ws_id, repos in WORKSPACE_REPOS.items():
+        spark_path = str(repos["spark"])
+        vscan_path = str(repos["vscan"])
         colors = AGENT_COLORS.get(ws_id, AGENT_COLORS["agent1"])
-        workspace = Workspace(
-            id=ws_id,
-            path=str(ws_path),
-            display_name=colors["label"],
-            color=colors["color"],
-            color_hex=colors["hex"],
-            vcs_type=detect_vcs(ws_path) if ws_path.exists() else "unknown",
-        )
-        store.write(ws_id, workspace.model_dump())
+
+        ws = existing.get(ws_id, {})
+        # Re-init if paths changed (e.g., agent1→spark1 migration)
+        if ws.get("spark_path") != spark_path or "spark_path" not in ws:
+            workspace = Workspace(
+                id=ws_id,
+                spark_path=spark_path,
+                vscan_path=vscan_path,
+                display_name=colors["label"],
+                color=colors["color"],
+                color_hex=colors["hex"],
+                vcs_type=detect_vcs(repos["spark"]) if repos["spark"].exists() else "unknown",
+            )
+            store.write(ws_id, workspace.model_dump())
 
 
 def _enrich(ws_data: dict) -> dict:
-    """Add live VCS info to workspace data."""
-    path = ws_data.get("path", "")
-    if path and Path(path).exists():
-        ws_data["vcs_type"] = detect_vcs(path)
-        ws_data["current_branch"] = get_current_branch(path)
+    """Add live VCS branch info for both repos."""
+    spark = ws_data.get("spark_path", ws_data.get("path", ""))
+    vscan = ws_data.get("vscan_path", "")
+
+    if spark and Path(spark).exists():
+        ws_data["vcs_type"] = detect_vcs(spark)
+        ws_data["current_branch"] = get_current_branch(spark)
+
+    if vscan and Path(vscan).exists():
+        ws_data["vscan_branch"] = get_current_branch(vscan)
+
+    # Legacy compat: expose path as spark_path
+    ws_data["path"] = spark
     return ws_data
 
 
@@ -116,14 +130,21 @@ async def refresh_workspace(workspace_id: str):
     if not ws:
         raise HTTPException(404, f"Workspace {workspace_id} not found")
 
-    path = ws.get("path", "")
-    if path and Path(path).exists():
-        ws["vcs_type"] = detect_vcs(path)
-        ws["current_branch"] = get_current_branch(path)
-        is_clean, modified = check_clean_state(path)
+    spark = ws.get("spark_path", ws.get("path", ""))
+    vscan = ws.get("vscan_path", "")
+
+    if spark and Path(spark).exists():
+        ws["vcs_type"] = detect_vcs(spark)
+        ws["current_branch"] = get_current_branch(spark)
+        is_clean, modified = check_clean_state(spark)
         ws["is_clean"] = is_clean
         ws["modified_count"] = len(modified)
-        store.write(workspace_id, ws)
+
+    if vscan and Path(vscan).exists():
+        ws["vscan_branch"] = get_current_branch(vscan)
+
+    ws["path"] = spark
+    store.write(workspace_id, ws)
 
     await ws_manager.broadcast("workspace_updated", {"workspace_id": workspace_id, **ws})
     return ws

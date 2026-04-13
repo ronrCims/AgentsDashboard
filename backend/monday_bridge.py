@@ -21,12 +21,16 @@ try:
         fmt_full,
         fmt_markdown,
         GRP_OPEN,
+        BOARD_ID,
+        ITEM_FIELDS_LIGHT,
     )
     MONDAY_AVAILABLE = True
 except ImportError as e:
     MONDAY_AVAILABLE = False
     _import_error = str(e)
     GRP_OPEN = None
+    BOARD_ID = None
+    ITEM_FIELDS_LIGHT = ""
 
 
 def _get_all_open_large() -> list:
@@ -34,6 +38,36 @@ def _get_all_open_large() -> list:
     if not MONDAY_AVAILABLE:
         return []
     return get_group_items(GRP_OPEN, limit=500)
+
+
+def _query_by_person(name: str) -> list:
+    """
+    Server-side query: get ALL board items where the people column contains name.
+    Uses Monday API filtering — not limited by group or paginated fetch.
+    Returns items from all groups (open, estimation, etc.).
+    """
+    if not MONDAY_AVAILABLE:
+        return []
+    # Query with contains_text filter on the 'people' column
+    query = """
+    query ($boardId: [ID!]!) {
+      boards(ids: $boardId) {
+        items_page(limit: 500, query_params: {
+          rules: [{column_id: "people", compare_value: ["%s"], operator: contains_text}]
+        }) {
+          items { %s }
+        }
+      }
+    }
+    """ % (name.replace('"', '\\"'), ITEM_FIELDS_LIGHT)
+    try:
+        data = monday_query(query, {"boardId": [BOARD_ID]})
+        boards = data.get("boards", [])
+        if boards:
+            return boards[0].get("items_page", {}).get("items", [])
+    except Exception:
+        pass
+    return []
 
 
 def _get_col(item: dict, col_id: str) -> str:
@@ -46,18 +80,27 @@ def _get_col(item: dict, col_id: str) -> str:
 
 def get_my_tasks(name: str = "Ron") -> list[dict]:
     """
-    Get open tasks where the person is engineer (people) or QA (people_127).
-    Uses a higher limit to avoid truncation.
+    Get tasks where the person is engineer (people) or QA (people_127).
+    Uses server-side Monday API filter for the people column (no pagination cap),
+    then adds any QA-only items from the open group.
     """
     if not MONDAY_AVAILABLE:
         return []
-    items = _get_all_open_large()
+
+    # Server-side filter: all items where people column contains name
+    by_engineer = _query_by_person(name)
+    engineer_ids = {i["id"] for i in by_engineer}
+
+    # Also scan open group for QA role (people_127) — not filterable via API
+    open_items = _get_all_open_large()
     name_lower = name.lower()
-    return [
-        item for item in items
-        if name_lower in _get_col(item, "people").lower()
-        or name_lower in _get_col(item, "people_127").lower()
+    by_qa = [
+        item for item in open_items
+        if item["id"] not in engineer_ids
+        and name_lower in _get_col(item, "people_127").lower()
     ]
+
+    return by_engineer + by_qa
 
 
 def get_tt_details(tt_number: str) -> dict | None:

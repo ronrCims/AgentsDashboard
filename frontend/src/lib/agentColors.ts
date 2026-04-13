@@ -64,11 +64,10 @@ export function formatTime(isoString: string): string {
 
 // Truncate branch name for display
 export function shortBranch(branch: string | null): string {
-  if (!branch) return '';
-  // Remove SVN prefix
+  if (!branch) return '—';
   const cleaned = branch
+    .replace(/^https?:\/\/[^/]+\/svn\/pcb\/AOI\/Versions\/SPARK\/3\.0\//, '')
     .replace(/^\^\/AOI\/Versions\/SPARK\/3\.0\//, '')
     .replace(/^Release\/!RTM\//, '');
-  // Truncate if too long
-  return cleaned.length > 25 ? cleaned.slice(0, 22) + '...' : cleaned;
+  return cleaned.length > 28 ? cleaned.slice(0, 25) + '...' : cleaned;
 }

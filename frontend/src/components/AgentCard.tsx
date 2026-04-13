@@ -23,8 +23,9 @@ export function AgentCard({ workspace, task, onAssign, onApprove }: AgentCardPro
   const progressLines = useStore((s) => s.switchProgress[workspace.id]?.length ?? 0);
 
   // Determine clean state from workspace (enriched by backend)
-  const isClean = (workspace as Record<string, unknown>).is_clean as boolean | null | undefined;
-  const modifiedCount = (workspace as Record<string, unknown>).modified_count as number | undefined;
+  const wsAny = workspace as unknown as Record<string, unknown>;
+  const isClean = wsAny.is_clean as boolean | null | undefined;
+  const modifiedCount = wsAny.modified_count as number | undefined;
 
   function CleanDot() {
     if (isClean === true) {
@@ -76,34 +77,41 @@ export function AgentCard({ workspace, task, onAssign, onApprove }: AgentCardPro
 
           {/* Task info */}
           {task ? (
-            <div className="space-y-1">
-              <div className="text-sm font-medium truncate">
-                TT{task.tt_number}
-                {task.title && <span className="text-text-secondary font-normal"> — {task.title}</span>}
-              </div>
-              <div className="text-xs flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
-                <span>{shortBranch(workspace.current_branch)}</span>
-              </div>
+            <div className="text-sm font-medium truncate">
+              TT{task.tt_number}
+              {task.title && <span style={{ color: 'var(--color-text-secondary)', fontWeight: 400 }}> — {task.title}</span>}
             </div>
           ) : (
-            <div className="space-y-1">
-              <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                No active task
-              </div>
-              <div className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>
-                {shortBranch(workspace.current_branch)}
-              </div>
+            <div className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              No active task
             </div>
           )}
+
+          {/* Branch info — both repos */}
+          <div className="space-y-0.5">
+            <div className="text-xs flex items-center gap-1.5">
+              <span style={{ color: '#4a9eff', fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em' }}>SPK</span>
+              <span className="font-mono truncate" style={{ color: 'var(--color-text-muted)' }}>{shortBranch(workspace.current_branch)}</span>
+            </div>
+            <div className="text-xs flex items-center gap-1.5">
+              <span style={{ color: '#fb923c', fontSize: '9px', fontWeight: 700, letterSpacing: '0.05em' }}>VSC</span>
+              <span className="font-mono truncate" style={{ color: 'var(--color-text-muted)' }}>{shortBranch(workspace.vscan_branch)}</span>
+            </div>
+          </div>
 
           {/* Pipeline progress */}
           {task && (
             <PipelineProgress stage={task.stage} color={color} compact />
           )}
 
-          {/* Path */}
-          <div className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>
-            {workspace.path}
+          {/* Paths */}
+          <div className="space-y-0.5">
+            <div className="text-xs font-mono" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
+              {workspace.spark_path || workspace.path}
+            </div>
+            <div className="text-xs font-mono" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
+              {workspace.vscan_path}
+            </div>
           </div>
 
           {/* Actions */}

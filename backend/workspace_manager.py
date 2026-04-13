@@ -9,7 +9,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from config import WORKSPACE_PATHS, RON_WORKSPACE, SVN_CURRENT, SVN_RTM_ROOT, SVN_BASE
+from config import WORKSPACE_PATHS, WORKSPACE_REPOS, RON_WORKSPACE, SVN_CURRENT, SVN_RTM_ROOT, SVN_BASE
 from models import WorkspaceStatus
 from store import JsonStore
 from svn_bridge import detect_vcs, get_current_branch, check_clean_state
@@ -21,6 +21,13 @@ import config
 def _guard_not_ron(path: str) -> None:
     if Path(path).resolve() == RON_WORKSPACE.resolve():
         raise ValueError(f"SAFETY: Operation refused on Ron's workspace {RON_WORKSPACE}")
+
+
+def _get_repo_paths(ws: dict) -> tuple[str, str]:
+    """Return (spark_path, vscan_path) from a workspace dict."""
+    spark = ws.get("spark_path") or ws.get("path", "")
+    vscan = ws.get("vscan_path", "")
+    return spark, vscan
 
 
 # ── Branch Discovery ──────────────────────────────────────────────
@@ -202,46 +209,53 @@ async def switch_branch_async(workspace_id: str, target_url: str, ws_manager) ->
     if not ws:
         return False, "Workspace not found"
 
-    path = ws.get("path", "")
-    _guard_not_ron(path)
+    spark_path, vscan_path = _get_repo_paths(ws)
+    _guard_not_ron(spark_path)
+    if vscan_path:
+        _guard_not_ron(vscan_path)
 
-    if not Path(path).exists():
-        return False, f"Path {path} does not exist"
+    if not Path(spark_path).exists():
+        return False, f"Spark path {spark_path} does not exist"
 
-    # Safety: check clean state
-    is_clean, modified = check_clean_state(path)
+    # Safety: check clean state on both repos
+    is_clean, modified = check_clean_state(spark_path)
     if not is_clean:
-        msg = f"Workspace has {len(modified)} uncommitted change(s) — refusing to switch"
+        msg = f"spark repo has {len(modified)} uncommitted change(s) — refusing to switch"
         await ws_manager.broadcast("workspace_updated", {
-            "workspace_id": workspace_id,
-            "status": "available",
-            "error": msg,
-            "modified_files": modified[:10],
+            "workspace_id": workspace_id, "status": "available",
+            "error": msg, "modified_files": modified[:10],
         })
         return False, msg
 
+    if vscan_path and Path(vscan_path).exists():
+        is_clean_v, modified_v = check_clean_state(vscan_path)
+        if not is_clean_v:
+            msg = f"vscan90 repo has {len(modified_v)} uncommitted change(s) — refusing to switch"
+            await ws_manager.broadcast("workspace_updated", {
+                "workspace_id": workspace_id, "status": "available",
+                "error": msg, "modified_files": modified_v[:10],
+            })
+            return False, msg
+
     # Mark as switching
     store.update(workspace_id, lambda w: {
-        **w,
-        "status": WorkspaceStatus.switching.value,
+        **w, "status": WorkspaceStatus.switching.value,
         "last_activity": datetime.now().isoformat(),
     })
     await ws_manager.broadcast("workspace_updated", {
-        "workspace_id": workspace_id,
-        "status": "switching",
-        "target_branch": target_url,
+        "workspace_id": workspace_id, "status": "switching", "target_branch": target_url,
     })
 
-    # Run SVN switch in subprocess, stream output
-    try:
+    async def _svn_switch(repo_path: str, label: str) -> tuple[bool, str]:
+        """Run svn switch on one repo, streaming output."""
         proc = await asyncio.create_subprocess_exec(
-            "svn", "switch", target_url, path,
+            "svn", "switch", target_url, repo_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-
         lines_seen = 0
-        async def stream_output():
+
+        async def stream():
             nonlocal lines_seen
             async for line in proc.stdout:
                 decoded = line.decode("utf-8", errors="replace").rstrip()
@@ -249,41 +263,51 @@ async def switch_branch_async(workspace_id: str, target_url: str, ws_manager) ->
                     lines_seen += 1
                     await ws_manager.broadcast("workspace_switch_progress", {
                         "workspace_id": workspace_id,
-                        "line": decoded,
+                        "line": f"[{label}] {decoded}",
                         "lines_seen": lines_seen,
                     })
 
-        await asyncio.gather(stream_output(), proc.wait())
-        stderr_output = await proc.stderr.read()
+        await asyncio.gather(stream(), proc.wait())
+        stderr_out = (await proc.stderr.read()).decode("utf-8", errors="replace").strip()
+        return proc.returncode == 0, stderr_out
 
-        if proc.returncode == 0:
-            new_branch = get_current_branch(path)
-            store.update(workspace_id, lambda w: {
-                **w,
-                "status": WorkspaceStatus.available.value,
-                "current_branch": new_branch,
-                "last_activity": datetime.now().isoformat(),
-            })
+    try:
+        # Switch spark repo
+        ok_spark, err_spark = await _svn_switch(spark_path, "spark")
+        if not ok_spark:
+            store.update(workspace_id, lambda w: {**w, "status": WorkspaceStatus.available.value})
             await ws_manager.broadcast("workspace_updated", {
-                "workspace_id": workspace_id,
-                "status": "available",
-                "current_branch": new_branch,
-                "message": f"Switched to {new_branch}",
+                "workspace_id": workspace_id, "status": "available", "error": err_spark,
             })
-            return True, f"Switched to {new_branch}"
-        else:
-            err = stderr_output.decode("utf-8", errors="replace").strip()
-            store.update(workspace_id, lambda w: {
-                **w,
-                "status": WorkspaceStatus.available.value,
-                "last_activity": datetime.now().isoformat(),
-            })
-            await ws_manager.broadcast("workspace_updated", {
-                "workspace_id": workspace_id,
-                "status": "available",
-                "error": err,
-            })
-            return False, f"Switch failed: {err}"
+            return False, f"spark switch failed: {err_spark}"
+
+        # Switch vscan repo (if it exists)
+        vscan_new_branch = None
+        if vscan_path and Path(vscan_path).exists():
+            ok_vscan, err_vscan = await _svn_switch(vscan_path, "vscan90")
+            if not ok_vscan:
+                store.update(workspace_id, lambda w: {**w, "status": WorkspaceStatus.available.value})
+                await ws_manager.broadcast("workspace_updated", {
+                    "workspace_id": workspace_id, "status": "available",
+                    "error": f"vscan90 switch failed: {err_vscan}",
+                })
+                return False, f"vscan90 switch failed: {err_vscan}"
+            vscan_new_branch = get_current_branch(vscan_path)
+
+        new_branch = get_current_branch(spark_path)
+        store.update(workspace_id, lambda w: {
+            **w,
+            "status": WorkspaceStatus.available.value,
+            "current_branch": new_branch,
+            "vscan_branch": vscan_new_branch,
+            "last_activity": datetime.now().isoformat(),
+        })
+        await ws_manager.broadcast("workspace_updated", {
+            "workspace_id": workspace_id, "status": "available",
+            "current_branch": new_branch, "vscan_branch": vscan_new_branch,
+            "message": f"Switched to {new_branch}",
+        })
+        return True, f"Switched to {new_branch}"
 
     except asyncio.CancelledError:
         store.update(workspace_id, lambda w: {**w, "status": WorkspaceStatus.available.value})
@@ -296,26 +320,42 @@ async def switch_branch_async(workspace_id: str, target_url: str, ws_manager) ->
 # ── Status Enrichment ─────────────────────────────────────────────
 
 def get_workspace_detail(workspace_id: str) -> dict | None:
-    """Get a workspace with full live details."""
+    """Get a workspace with full live details for both repos."""
     store = get_ws_store()
     ws = store.read_one(workspace_id)
     if not ws:
         return None
 
-    path = ws.get("path", "")
-    p = Path(path)
-    ws["path_exists"] = p.exists()
+    spark_path, vscan_path = _get_repo_paths(ws)
+    ws["path"] = spark_path  # legacy compat
 
-    if p.exists():
-        ws["vcs_type"] = detect_vcs(path)
-        ws["current_branch"] = get_current_branch(path)
-        is_clean, modified = check_clean_state(path)
+    sp = Path(spark_path)
+    ws["path_exists"] = sp.exists()
+
+    if sp.exists():
+        ws["vcs_type"] = detect_vcs(spark_path)
+        ws["current_branch"] = get_current_branch(spark_path)
+        is_clean, modified = check_clean_state(spark_path)
         ws["is_clean"] = is_clean
         ws["modified_count"] = len(modified)
-        ws["modified_files"] = modified[:20]  # cap at 20 for display
+        ws["modified_files"] = modified[:20]
     else:
         ws["is_clean"] = None
         ws["modified_count"] = 0
         ws["modified_files"] = []
+
+    vp = Path(vscan_path) if vscan_path else None
+    ws["vscan_path_exists"] = vp.exists() if vp else False
+    if vp and vp.exists():
+        ws["vscan_branch"] = get_current_branch(vscan_path)
+        vscan_clean, vscan_mod = check_clean_state(vscan_path)
+        ws["vscan_is_clean"] = vscan_clean
+        ws["vscan_modified_count"] = len(vscan_mod)
+        ws["vscan_modified_files"] = vscan_mod[:20]
+    else:
+        ws["vscan_branch"] = None
+        ws["vscan_is_clean"] = None
+        ws["vscan_modified_count"] = 0
+        ws["vscan_modified_files"] = []
 
     return ws

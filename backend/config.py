@@ -23,11 +23,16 @@ FEATURES_DIR = TOOLS_DIR / "features"
 
 # ── Workspaces ─────────────────────────────────────────────────────
 RON_WORKSPACE = Path(r"C:\camtek")  # NEVER MODIFY
-WORKSPACE_PATHS = {
-    "agent1": Path(r"C:\agent1"),
-    "agent2": Path(r"C:\agent2"),
-    "agent3": Path(r"C:\agent3"),
+
+# Each workspace has two SVN repos: spark (AOI) and vscan90
+WORKSPACE_REPOS = {
+    "agent1": {"spark": Path(r"C:\spark1"),    "vscan": Path(r"C:\vscan90_1")},
+    "agent2": {"spark": Path(r"C:\spark2"),    "vscan": Path(r"C:\vscan90_2")},
+    "agent3": {"spark": Path(r"C:\spark3"),    "vscan": Path(r"C:\vscan90_3")},
 }
+
+# Backward-compat alias: primary path = spark repo
+WORKSPACE_PATHS = {ws_id: repos["spark"] for ws_id, repos in WORKSPACE_REPOS.items()}
 
 # ── Build Tools ────────────────────────────────────────────────────
 MSBUILD_PATH = Path(
