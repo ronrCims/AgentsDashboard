@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../store';
 import { switchBranch } from '../api/client';
-import type { BranchList, SwitchProgressEvent } from '../api/types';
+import type { SwitchProgressEvent } from '../api/types';
 
 interface Props {
   workspaceId: string;
@@ -80,15 +81,23 @@ export function BranchPickerModal({ workspaceId, workspaceName, currentBranch, o
 
   const isActive = switching || isSwitchingRemotely;
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+      }}
       onClick={(e) => { if (e.target === e.currentTarget && !isActive) onClose(); }}
     >
       <div
-        className="w-[520px] max-h-[80vh] flex flex-col rounded-xl overflow-hidden"
-        style={{ background: 'var(--color-surface-card)', border: '1px solid var(--color-surface-border)' }}
+        style={{
+          width: '520px', maxHeight: '80vh',
+          display: 'flex', flexDirection: 'column',
+          borderRadius: '12px', overflow: 'hidden',
+          background: '#161b26',
+          border: '1px solid #2a3144',
+        }}
       >
         {/* Header */}
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--color-surface-border)' }}>
@@ -210,4 +219,6 @@ export function BranchPickerModal({ workspaceId, workspaceName, currentBranch, o
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

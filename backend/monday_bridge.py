@@ -20,11 +20,20 @@ try:
         monday_query,
         fmt_full,
         fmt_markdown,
+        GRP_OPEN,
     )
     MONDAY_AVAILABLE = True
 except ImportError as e:
     MONDAY_AVAILABLE = False
     _import_error = str(e)
+    GRP_OPEN = None
+
+
+def _get_all_open_large() -> list:
+    """Fetch open items with a higher limit (500) to avoid truncation."""
+    if not MONDAY_AVAILABLE:
+        return []
+    return get_group_items(GRP_OPEN, limit=500)
 
 
 def _get_col(item: dict, col_id: str) -> str:
@@ -36,14 +45,18 @@ def _get_col(item: dict, col_id: str) -> str:
 
 
 def get_my_tasks(name: str = "Ron") -> list[dict]:
-    """Get open tasks assigned to the specified person."""
+    """
+    Get open tasks where the person is engineer (people) or QA (people_127).
+    Uses a higher limit to avoid truncation.
+    """
     if not MONDAY_AVAILABLE:
         return []
-    items = get_all_open_items()
+    items = _get_all_open_large()
     name_lower = name.lower()
     return [
         item for item in items
         if name_lower in _get_col(item, "people").lower()
+        or name_lower in _get_col(item, "people_127").lower()
     ]
 
 
@@ -73,10 +86,10 @@ def search_tasks(query: str) -> list[dict]:
 
 
 def get_all_open() -> list[dict]:
-    """Get all open tasks."""
+    """Get all open tasks (up to 500)."""
     if not MONDAY_AVAILABLE:
         return []
-    return get_all_open_items()
+    return _get_all_open_large()
 
 
 def extract_task_metadata(item: dict) -> dict:

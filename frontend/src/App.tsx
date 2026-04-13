@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from './store';
 import { useWebSocket } from './ws/useWebSocket';
 import { AgentCard } from './components/AgentCard';
 import { SummaryCard } from './components/SummaryCard';
 import { ActivityFeed } from './components/ActivityFeed';
 import { TaskQueue } from './components/TaskQueue';
+import { AssignTaskModal } from './components/AssignTaskModal';
 
 function App() {
   const workspaces = useStore((s) => s.workspaces);
@@ -29,6 +30,9 @@ function App() {
   // Find task for each workspace
   const getTaskForWorkspace = (wsId: string) =>
     tasks.find((t) => t.workspace_id === wsId) || null;
+
+  // Assign task modal state
+  const [assignTarget, setAssignTarget] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-surface)' }}>
@@ -64,6 +68,16 @@ function App() {
         </span>
       </header>
 
+      {/* Assign Task Modal */}
+      {assignTarget && (
+        <AssignTaskModal
+          workspaceId={assignTarget.id}
+          workspaceName={assignTarget.name}
+          onClose={() => setAssignTarget(null)}
+          onAssigned={() => setAssignTarget(null)}
+        />
+      )}
+
       {/* Content */}
       <main className="max-w-7xl mx-auto p-6">
         {selectedTab === 'dashboard' && (
@@ -75,6 +89,7 @@ function App() {
                   key={ws.id}
                   workspace={ws}
                   task={getTaskForWorkspace(ws.id)}
+                  onAssign={() => setAssignTarget({ id: ws.id, name: ws.display_name })}
                 />
               ))}
               <SummaryCard
