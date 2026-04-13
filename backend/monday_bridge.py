@@ -5,7 +5,7 @@ Imports and wraps functions from the existing monday_cli.py tool.
 
 import sys
 from pathlib import Path
-from config import TOOLS_DIR
+from config import TOOLS_DIR, MONDAY_PERSON
 
 # Add existing tools to Python path for importing
 if str(TOOLS_DIR) not in sys.path:
@@ -78,7 +78,7 @@ def _get_col(item: dict, col_id: str) -> str:
     return ""
 
 
-def get_my_tasks(name: str = "Ron") -> list[dict]:
+def get_my_tasks(name: str = MONDAY_PERSON) -> list[dict]:
     """
     Get tasks where the person is engineer (people) or QA (people_127).
     Uses server-side Monday API filter for the people column (no pagination cap),

@@ -57,6 +57,7 @@ AGENT_COLORS = {
 
 # ── Monday.com ─────────────────────────────────────────────────────
 MONDAY_BOARD_ID = "4809670838"
+MONDAY_PERSON = "Ron Rosenfeld"  # Full name — used for My Tasks filter
 
 # ── SVN ────────────────────────────────────────────────────────────
 SVN_BASE = "https://svn/svn/pcb/AOI/Versions/SPARK/3.0"

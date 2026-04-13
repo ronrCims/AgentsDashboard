@@ -9,6 +9,7 @@ from monday_bridge import (
     get_tt_markdown, search_tasks, get_all_open,
     extract_task_metadata,
 )
+from config import MONDAY_PERSON
 
 router = APIRouter(prefix="/api/monday", tags=["monday"])
 
@@ -20,7 +21,7 @@ async def monday_status():
 
 
 @router.get("/my-tasks")
-async def my_tasks(name: str = "Ron"):
+async def my_tasks(name: str = MONDAY_PERSON):
     """Get open tasks assigned to the specified person."""
     if not is_available():
         raise HTTPException(503, "Monday.com integration not available")
