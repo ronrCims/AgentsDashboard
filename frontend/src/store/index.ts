@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { Workspace, Task, MondayTask, ActivityEntry } from '../api/types';
-import { getWorkspaces, getTasks, getMondayTasks } from '../api/client';
+import type { Workspace, Task, MondayTask, ActivityEntry, BranchList, SwitchProgressEvent } from '../api/types';
+import { getWorkspaces, getTasks, getMondayTasks, getBranches } from '../api/client';
 
 interface StoreState {
   // Workspaces
@@ -22,6 +22,14 @@ interface StoreState {
   // Activity feed
   activities: ActivityEntry[];
   addActivity: (entry: ActivityEntry) => void;
+
+  // P3: Branch switching
+  branches: BranchList | null;
+  branchesLoading: boolean;
+  refreshBranches: () => Promise<void>;
+  switchProgress: Record<string, SwitchProgressEvent[]>; // workspace_id → lines
+  addSwitchLine: (event: SwitchProgressEvent) => void;
+  clearSwitchProgress: (workspace_id: string) => void;
 
   // UI state
   selectedTab: 'dashboard' | 'queue' | 'history';
@@ -76,6 +84,33 @@ export const useStore = create<StoreState>((set) => ({
   activities: [],
   addActivity: (entry) => set((state) => ({
     activities: [entry, ...state.activities].slice(0, 200),
+  })),
+
+  // P3: Branch switching
+  branches: null,
+  branchesLoading: false,
+  refreshBranches: async () => {
+    set({ branchesLoading: true });
+    try {
+      const branches = await getBranches();
+      set({ branches, branchesLoading: false });
+    } catch (e) {
+      console.error('Failed to refresh branches:', e);
+      set({ branchesLoading: false });
+    }
+  },
+  switchProgress: {},
+  addSwitchLine: (event) => set((state) => ({
+    switchProgress: {
+      ...state.switchProgress,
+      [event.workspace_id]: [
+        ...(state.switchProgress[event.workspace_id] ?? []),
+        event,
+      ].slice(-200),
+    },
+  })),
+  clearSwitchProgress: (workspace_id) => set((state) => ({
+    switchProgress: { ...state.switchProgress, [workspace_id]: [] },
   })),
 
   // UI

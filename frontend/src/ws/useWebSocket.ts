@@ -12,6 +12,8 @@ export function useWebSocket() {
   const addActivity = useStore((s) => s.addActivity);
   const updateWorkspace = useStore((s) => s.updateWorkspace);
   const refreshTasks = useStore((s) => s.refreshTasks);
+  const addSwitchLine = useStore((s) => s.addSwitchLine);
+  const clearSwitchProgress = useStore((s) => s.clearSwitchProgress);
 
   useEffect(() => {
     let reconnectTimer: number;
@@ -49,10 +51,24 @@ export function useWebSocket() {
       const { type, data } = event;
 
       switch (type) {
-        case 'workspace_updated':
-          if (data.workspace_id) {
-            updateWorkspace(data.workspace_id as string, data);
+        case 'workspace_updated': {
+          const wsId = data.workspace_id as string;
+          if (wsId) {
+            updateWorkspace(wsId, data);
+            // If switch completed, clear the progress buffer
+            if (data.status && data.status !== 'switching') {
+              clearSwitchProgress(wsId);
+            }
           }
+          break;
+        }
+
+        case 'workspace_switch_progress':
+          addSwitchLine({
+            workspace_id: data.workspace_id as string,
+            line: data.line as string,
+            lines_seen: data.lines_seen as number,
+          });
           break;
 
         case 'task_stage_changed':
@@ -100,5 +116,5 @@ export function useWebSocket() {
       clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };
-  }, [addActivity, updateWorkspace, refreshTasks]);
+  }, [addActivity, updateWorkspace, refreshTasks, addSwitchLine, clearSwitchProgress]);
 }

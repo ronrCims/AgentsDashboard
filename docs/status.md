@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-13
 
-## Current Phase: P3 — Workspace Manager (next)
+## Current Phase: P3 — Workspace Manager (Done)
 
 ### Overall Progress
 
@@ -11,7 +11,7 @@
 | P0: Project Setup | **Done** | Repo created, Node.js + gh CLI installed, project structure scaffolded |
 | P1: Hub Backend | **Done** | FastAPI at :8800, all endpoints working, Monday.com bridge live |
 | P2: MVP Frontend | **Done** | React SPA at :5173, agent cards, task queue, activity feed, WebSocket |
-| P3: Workspace Manager | Not Started | VCS detection (basic done), branch switching, claim/release |
+| P3: Workspace Manager | **Done** | Branch listing, async SVN switch with WS streaming, claim/release, clean state |
 | P4: Build & Test Runner | Not Started | msbuild/vstest wrappers, output parsing |
 | P5: RAG & Context Pipeline | Not Started | Context selection, task brief generation |
 | P6: Orchestrator + Copilot Handoff | Not Started | Pipeline execution, .agent/ files, "Open in VS" |
@@ -33,9 +33,26 @@
 - `WS /ws` — WebSocket for real-time events
 - API docs at http://localhost:8800/docs
 
+**P3: Workspace Manager (backend):**
+- `GET /api/workspaces/branches` — list Current/Work/RTM branches from SVN
+- `GET /api/workspaces/{id}/detail` — full detail with clean state + modified files
+- `POST /api/workspaces/{id}/switch` — async SVN switch, queued in background
+- `POST /api/workspaces/{id}/claim` — claim workspace for a TT
+- `POST /api/workspaces/{id}/release` — release workspace back to available
+- `GET /api/workspaces/available/first` — find first free workspace
+- WS event `workspace_switch_progress` — SVN switch output streamed line-by-line
+- Safety: refuses switch if uncommitted changes, refuses ops on C:\camtek
+
+**P3: Workspace Manager (frontend):**
+- Clean state indicator dot (green=clean, red=dirty) on each agent card
+- "Switch Branch" button on available workspaces
+- BranchPickerModal with search/filter, category badges, live progress log
+- Switch progress lines streamed via WebSocket shown in modal
+
 **Frontend (React + Vite at localhost:5173):**
 - Dark theme with agent color identity system
-- Agent cards showing workspace status, VCS branch, pipeline progress
+- Agent cards showing workspace status, VCS branch, pipeline progress, clean state
+- Branch picker modal with all SVN branches (Current, Work, RTM)
 - Task queue with Monday.com data, filters by type/system, sort by priority
 - Activity feed (WebSocket-driven)
 - Summary card (free agents, active tasks, Monday open count)
@@ -57,10 +74,9 @@ npm run dev
 
 ### What's Next
 
-1. Push to GitHub (need `gh auth login`)
-2. P3: Workspace Manager — full branch switching, claim/release lifecycle
-3. P4: Build & Test Runner — msbuild/vstest from dashboard
-4. P5: Context pipeline — task brief generation
+1. P4: Build & Test Runner — msbuild/vstest from dashboard, streaming output
+2. P5: Context pipeline — task brief generation
+3. P6: Orchestrator + Copilot Handoff
 
 ### Environment
 
@@ -73,7 +89,6 @@ npm run dev
 
 ### Known Issues / Blockers
 
-- GitHub CLI not authenticated yet — need `gh auth login` (interactive)
-- Agent workspaces C:\agent2, C:\agent3 don't exist yet
+- Agent workspaces C:\agent2, C:\agent3 may not exist yet (workspace cards appear but paths absent)
 - Activity feed is ephemeral (not persisted across restarts yet)
 - Build/test runner not implemented yet (P4)

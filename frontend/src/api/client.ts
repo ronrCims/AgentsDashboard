@@ -21,11 +21,19 @@ export const api = {
 
 // ── Typed API functions ───────────────────────────────────────────
 
-import type { Workspace, Task, MondayTask, HubInfo } from './types';
+import type { Workspace, WorkspaceDetail, BranchList, SwitchQueuedResponse, Task, MondayTask, HubInfo } from './types';
 
 export const getWorkspaces = () => api.get<Workspace[]>('/workspaces');
 export const getWorkspace = (id: string) => api.get<Workspace>(`/workspaces/${id}`);
+export const getWorkspaceDetail = (id: string) => api.get<WorkspaceDetail>(`/workspaces/${id}/detail`);
 export const refreshWorkspace = (id: string) => api.post<Workspace>(`/workspaces/${id}/refresh`);
+export const getBranches = () => api.get<BranchList>('/workspaces/branches');
+export const switchBranch = (id: string, target_branch: string) =>
+  api.post<SwitchQueuedResponse>(`/workspaces/${id}/switch`, { target_branch });
+export const claimWorkspace = (id: string, tt_number: string) =>
+  api.post<{ success: boolean; message: string }>(`/workspaces/${id}/claim`, { tt_number });
+export const releaseWorkspace = (id: string) =>
+  api.post<{ success: boolean; message: string }>(`/workspaces/${id}/release`);
 
 export const getTasks = () => api.get<Task[]>('/tasks');
 export const getTask = (tt: string) => api.get<Task>(`/tasks/${tt}`);

@@ -110,6 +110,39 @@ export interface ActivityEntry {
   event_type: string;
 }
 
+// P3: Workspace detail with clean state
+export interface WorkspaceDetail extends Workspace {
+  path_exists: boolean;
+  is_clean: boolean | null;
+  modified_count: number;
+  modified_files: string[];
+}
+
+// P3: Branch lists from SVN
+export interface RtmBranch {
+  name: string;
+  url: string;
+}
+
+export interface BranchList {
+  current: string;          // trunk URL
+  work: string[];           // feature branch names
+  rtm_roots: RtmBranch[];   // Build_XXXX
+  rtm_clients: RtmBranch[]; // Build_XXXX_Customer_...
+}
+
+export interface SwitchQueuedResponse {
+  queued: boolean;
+  workspace_id: string;
+  target_url: string;
+}
+
+export interface SwitchProgressEvent {
+  workspace_id: string;
+  line: string;
+  lines_seen: number;
+}
+
 export interface HubInfo {
   msbuild_available: boolean;
   msbuild_path: string;
