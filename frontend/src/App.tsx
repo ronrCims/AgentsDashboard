@@ -13,6 +13,7 @@ function App() {
   const mondayTasks = useStore((s) => s.mondayTasks);
   const refreshWorkspaces = useStore((s) => s.refreshWorkspaces);
   const refreshTasks = useStore((s) => s.refreshTasks);
+  const refreshMonday = useStore((s) => s.refreshMonday);
   const selectedTab = useStore((s) => s.selectedTab);
   const setSelectedTab = useStore((s) => s.setSelectedTab);
 
@@ -23,7 +24,8 @@ function App() {
   useEffect(() => {
     refreshWorkspaces();
     refreshTasks();
-  }, [refreshWorkspaces, refreshTasks]);
+    refreshMonday();
+  }, [refreshWorkspaces, refreshTasks, refreshMonday]);
 
   const freeCount = workspaces.filter((w) => w.status === 'available').length;
 
